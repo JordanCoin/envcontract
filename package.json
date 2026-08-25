@@ -7,8 +7,14 @@
   "type": "module",
   "private": false,
   "bin": {
-    "envcontract": "dist/cli/index.js"
+    "envcontract": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "action.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=24"
   },
@@ -16,7 +22,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "build": "ncc build src/main.ts -o dist && ncc build src/cli.ts -o dist/cli"
+    "build": "ncc build src/main.ts -o dist && ncc build src/cli-main.ts -o dist/cli && node -e \"const fs=require('node:fs');fs.writeFileSync('dist/cli.js','#!/usr/bin/env node\\n'+fs.readFileSync('dist/cli/index.js','utf8'));fs.chmodSync('dist/cli.js',0o755);fs.rmSync('dist/cli',{recursive:true,force:true});\""
   },
   "dependencies": {
     "@actions/core": "^1.11.1",

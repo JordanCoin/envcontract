@@ -72,20 +72,33 @@ export const BUILTIN_IGNORE_PREFIXES: readonly string[] = [
  */
 export const VITE_BUILTIN_IGNORE: readonly string[] = ["MODE", "BASE_URL", "PROD", "DEV", "SSR"];
 
+/* The data above and the three matchers below are the single source of truth. */
+
+const EXACT_IGNORE = new Set(BUILTIN_IGNORE);
+const VITE_IGNORE = new Set(VITE_BUILTIN_IGNORE);
+
 /** True when `key` is a platform built-in for the given reference kind. */
-export function isBuiltinIgnored(_key: string, _kind: RefKind): boolean {
-  throw new Error("not implemented");
+export function isBuiltinIgnored(key: string, kind: RefKind): boolean {
+  if (EXACT_IGNORE.has(key)) return true;
+  for (const prefix of BUILTIN_IGNORE_PREFIXES) {
+    if (key.startsWith(prefix)) return true;
+  }
+  return kind === "import.meta.env" && VITE_IGNORE.has(key);
 }
 
 /**
  * Matches a key against a user ignore pattern: an exact key, or a `PREFIX_*`
  * glob (trailing `*` only).
  */
-export function matchesIgnorePattern(_key: string, _pattern: string): boolean {
-  throw new Error("not implemented");
+export function matchesIgnorePattern(key: string, pattern: string): boolean {
+  if (pattern.endsWith("*")) return key.startsWith(pattern.slice(0, -1));
+  return key === pattern;
 }
 
 /** True when `key` matches any of `patterns`. */
-export function matchesAnyIgnorePattern(_key: string, _patterns: readonly string[]): boolean {
-  throw new Error("not implemented");
+export function matchesAnyIgnorePattern(key: string, patterns: readonly string[]): boolean {
+  for (const pattern of patterns) {
+    if (matchesIgnorePattern(key, pattern)) return true;
+  }
+  return false;
 }

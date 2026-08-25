@@ -1,0 +1,37 @@
+name: CI
+
+# Public repo: GitHub-hosted runners are free here, so no self-hosted runner needed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to full commit SHAs: a mutable tag is a supply-chain
+      # hole, and this workflow has a checkout of the repository.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      # The bundled dist/ is committed; prove it is in sync with src/.
+      - run: pnpm build
+      - name: dist is up to date
+        run: |
+          if [ -n "$(git status --porcelain dist)" ]; then
+            echo "::error::dist/ is stale. Run 'pnpm build' and commit the result."
+            git --no-pager diff --stat dist
+            exit 1
+          fi

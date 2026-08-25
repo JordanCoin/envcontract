@@ -4,3 +4,4 @@ coverage/
 *.log
 .DS_Store
 # dist is committed (GitHub Actions runs the bundled output)
+.codemap/
