@@ -58,6 +58,41 @@ export const TEST_FILE_MARKERS: readonly string[] = [
 /** Suffixes never scanned, regardless of options. */
 export const ALWAYS_IGNORED_SUFFIXES: readonly string[] = [".d.ts", ".min.js", ".map"];
 
+/**
+ * Directories holding tooling that runs on a laptop or in CI but never inside a
+ * Vercel deployment. A variable only these read is not a deployment requirement.
+ * Skipped by default; a user `include` glob pulls any of them back in.
+ */
+export const NON_DEPLOYED_DIRECTORIES: readonly string[] = [
+  "scripts",
+  "script",
+  "e2e",
+  "cypress",
+  "playwright",
+  "test",
+  "tests",
+  ".storybook",
+  ".github",
+];
+
+/**
+ * Root config files for the same tooling. Matched by basename prefix, so
+ * `vitest.config.ts` and `vitest.config.mjs` both hit. Deliberately absent:
+ * `next.config.*`, `vite.config.*`, `astro.config.*`, `svelte.config.*` and
+ * `nuxt.config.*`, which Vercel evaluates at build time — the variables they
+ * read are real deployment requirements.
+ */
+export const NON_DEPLOYED_CONFIG_PREFIXES: readonly string[] = [
+  "playwright.config.",
+  "cypress.config.",
+  "vitest.config.",
+  "jest.config.",
+  "eslint.config.",
+  "prettier.config.",
+  ".eslintrc.",
+  "commitlint.config.",
+];
+
 export type DirEntry = {
   name: string;
   isDirectory: boolean;
@@ -187,6 +222,19 @@ function isTestPath(relativePath: string): boolean {
   return TEST_FILE_MARKERS.some((marker) => relativePath.includes(marker));
 }
 
+/** True when the path sits in tooling that never runs inside a deployment. */
+function isNonDeployedPath(relativePath: string, name: string): boolean {
+  const segments = relativePath.split("/");
+  // The basename is checked separately below, so only directories count here.
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    if (NON_DEPLOYED_DIRECTORIES.includes(segments[i] ?? "")) return true;
+  }
+  // Config files are matched at the repository root only: a `vitest.config.ts`
+  // nested in `src/` is more likely to be application code than tool config.
+  if (segments.length > 1) return false;
+  return NON_DEPLOYED_CONFIG_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
 /**
  * File-level selection. Hard rules (always-ignored suffixes, a real `.env`,
  * `.gitignore`) come first, then the user's `exclude`, then the user's
@@ -213,6 +261,7 @@ function isSelected(
   const extension = path.extname(name);
   if (!DEFAULT_INCLUDE_EXTENSIONS.includes(extension)) return false;
   if (opts.includeTests !== true && isTestPath(relativePath)) return false;
+  if (isNonDeployedPath(relativePath, name)) return false;
   return true;
 }
 

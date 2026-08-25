@@ -274,6 +274,21 @@ describe("Behaviour — a passing run", () => {
     expect(rec.summaries).toHaveLength(1);
   });
 
+  it("downgrades a failing step summary write to a warning, leaving the run green", async () => {
+    // A read-only GITHUB_STEP_SUMMARY must not turn a passing check red.
+    const { deps, rec } = fixtureDeps(FIXTURE_NEXT, { envs: ENV_ALL_PRESENT }, {
+      summary: {
+        async write() {
+          throw new Error("EACCES: permission denied, open '/github/step_summary'");
+        },
+      },
+    });
+    const result = await runEnvContract(nextInputs(), deps);
+    expect(result.report.status).toBe("pass");
+    expect(result.exitCode).toBe(0);
+    expect(rec.logs.warnings.join("\n")).toMatch(/summary/i);
+  });
+
   it("emits no annotations when nothing is missing", async () => {
     const { deps, rec } = fixtureDeps(FIXTURE_NEXT, { envs: ENV_ALL_PRESENT });
     const result = await runEnvContract(nextInputs(), deps);
@@ -539,6 +554,21 @@ describe("Sticky PR comment", () => {
     expect(github.created).toHaveLength(1);
     expect(github.updated).toHaveLength(1);
     expect(github.comments).toHaveLength(1);
+  });
+
+  it("finds the marker comment when it is buried behind a page of other comments", async () => {
+    // The real client pages through every comment; a busy PR must still update
+    // the existing report rather than appending a second one.
+    const older = Array.from({ length: 150 }, (_, i) => ({ id: i + 1, body: `chatter ${i}` }));
+    const github = createFakeGitHub({
+      eventName: "pull_request",
+      prNumber: 7,
+      listComments: async () => [...older, { id: 999, body: `${REPORT_MARKER}\nold report` }],
+    });
+    const { deps } = fixtureDeps(FIXTURE_NEXT, { envs: ENV_TWO_MISSING }, { github });
+    await runEnvContract(nextInputs({ comment: "true" }), deps);
+    expect(github.created).toHaveLength(0);
+    expect(github.updated).toEqual([{ id: 999, body: expect.stringContaining(REPORT_MARKER) }]);
   });
 
   it("leaves an unrelated comment alone when picking the sticky one", async () => {
@@ -1166,6 +1196,30 @@ describe("CLI", () => {
   it("exits 2 when no token is available at all", async () => {
     const { deps, write } = cliDeps({ envs: ENV_ALL_PRESENT });
     await expect(cli(baseArgv, deps, write)).resolves.toBe(2);
+  });
+
+  it("keeps stdout empty when --json cannot run for want of a token", async () => {
+    // Anything but the report on stdout would break `envcontract --json | jq`.
+    const { deps, rec, write, lines } = cliDeps({ envs: ENV_ALL_PRESENT });
+    await expect(cli([...baseArgv, "--json"], deps, write)).resolves.toBe(2);
+    expect(lines).toEqual([]);
+    expect(rec.logs.errors.join("\n")).toMatch(/token/i);
+  });
+
+  it("sends a usage error and the usage block to stderr, not stdout", async () => {
+    const { deps, rec, write, lines } = cliDeps({ envs: ENV_ALL_PRESENT });
+    await expect(cli([...baseArgv, "--wat"], deps, write)).resolves.toBe(2);
+    expect(lines).toEqual([]);
+    const stderr = rec.logs.errors.join("\n");
+    expect(stderr).toContain("--wat");
+    expect(stderr).toContain(USAGE.trimEnd());
+  });
+
+  it("still prints the usage block to stdout for an explicit --help", async () => {
+    const { deps, rec, write, lines } = cliDeps({ envs: ENV_ALL_PRESENT });
+    await expect(cli(["--help"], deps, write)).resolves.toBe(0);
+    expect(lines.join("\n")).toContain(USAGE.trimEnd());
+    expect(rec.logs.errors).toEqual([]);
   });
 
   it("never leaks a planted value to stdout", async () => {

@@ -543,7 +543,13 @@ async function emitReport(
   const annotations = renderAnnotations(report);
   for (const annotation of annotations) deps.annotations.emit(annotation);
 
-  await deps.summary.write(markdown);
+  // A step summary is a courtesy, never a verdict: a read-only summary file
+  // must not turn a passing check red.
+  try {
+    await deps.summary.write(markdown);
+  } catch (error) {
+    deps.logger.warning(`Could not write the step summary: ${describe(error)}`);
+  }
 
   const missing = report.findings
     .filter((finding) => finding.status === "missing")

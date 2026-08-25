@@ -247,14 +247,15 @@ export async function cli(
   deps: RunDeps,
   write: (line: string) => void,
 ): Promise<0 | 1 | 2> {
+  // stdout carries the report and nothing else, so `--json` stays pipeable.
+  // Diagnostics — usage errors, the missing-token message — go to stderr.
   const parsed = parseArgs(argv);
   if (isCliError(parsed)) {
-    write(parsed.message);
-    write("");
-    write(USAGE.trimEnd());
+    deps.logger.error(`${parsed.message}\n\n${USAGE.trimEnd()}`);
     return 2;
   }
 
+  // `--help` is a request for the usage block, so it is output, not an error.
   if (parsed.help) {
     write(USAGE.trimEnd());
     return 0;
@@ -263,7 +264,7 @@ export async function cli(
   const fromEnv = parsed.tokenEnv === null ? deps.env["VERCEL_TOKEN"] : deps.env[parsed.tokenEnv];
   const token = (parsed.token ?? fromEnv ?? "").trim();
   if (token === "") {
-    write("No Vercel token. Pass --token, or set VERCEL_TOKEN in the environment.");
+    deps.logger.error("No Vercel token. Pass --token, or set VERCEL_TOKEN in the environment.");
     return 2;
   }
 

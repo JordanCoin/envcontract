@@ -56,6 +56,8 @@ Branch-scoped Preview variables are matched against the pull request's head bran
 
 Built-in platform variables (`VERCEL_URL`, `VERCEL_ENV`, `NODE_ENV`, `VERCEL_GIT_*`, Vite's `MODE`/`DEV`/`PROD`, and friends) are never reported.
 
+Code that never runs inside a deployment is skipped by default, so a variable only your tooling reads is not reported as missing: `scripts/`, `script/`, `test/`, `tests/`, `e2e/`, `cypress/`, `playwright/`, `.storybook/`, `.github/`, and the root `playwright.config.*`, `cypress.config.*`, `vitest.config.*`, `jest.config.*`, `eslint.config.*`, `prettier.config.*`, `.eslintrc.*` and `commitlint.config.*` files. Framework configs that Vercel evaluates at build time (`next.config.*`, `vite.config.*`, `astro.config.*`, `svelte.config.*`, `nuxt.config.*`) **are** scanned. Any of the skipped paths comes back with an `include` glob.
+
 ## Output
 
 - The workflow check fails with a non-zero exit when the contract is broken.
@@ -122,6 +124,7 @@ Next.js (App and Pages router), Vite, SvelteKit, Astro, Remix, Nuxt, plain Node.
 ## Known limitations
 
 - Dynamic access such as `process.env[name]` cannot be resolved statically; it is reported as an info count, never a failure.
+- Only JavaScript and TypeScript sources are scanned. A variable declared solely in a non-JS file — `schema.prisma` (`env("DATABASE_URL")`), `docker-compose.yml`, `wrangler.toml`, a `turbo.json` `env` array — is invisible to the scanner. List those keys under `required:` (for example `required: DATABASE_URL`) so they are still checked against the environment.
 - Vercel custom environments are matched by `customEnvironmentId` when you pass one; the default targets are production, preview, and development.
 - Monorepos: run the Action once per Vercel project with `path:` and `project:` set.
 

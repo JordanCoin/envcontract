@@ -899,26 +899,35 @@ describe("Errors", () => {
   });
 
   it("retries a 500 once and succeeds on the second attempt", async () => {
-    const { rec, client } = setup([{ status: 500, body: {} }, envsBody([makeRawEnv({ key: "A" })])]);
+    const { rec, client } = setupWithSleep([{ status: 500, body: {} }, envsBody([makeRawEnv({ key: "A" })])]);
     const result = await client.listEnv("prj_abc123");
     expect(result.map((e) => e.key)).toEqual(["A"]);
     expect(rec.requests).toHaveLength(1 + MAX_SERVER_ERROR_RETRIES);
   });
 
+  it("backs off before retrying a 500 instead of hammering the API", async () => {
+    const { client, sleeps } = setupWithSleep([
+      { status: 500, body: {} },
+      envsBody([makeRawEnv({ key: "A" })]),
+    ]);
+    await client.listEnv("prj_abc123");
+    expect(sleeps).toEqual([BACKOFF_MS[0]]);
+  });
+
   it("maps two consecutive 500s to the server_error code", async () => {
-    const { client } = setup({ status: 500, body: {} });
+    const { client } = setupWithSleep({ status: 500, body: {} });
     const error = await captureError(client.listEnv("prj_abc123"));
     expect((error as VercelError).code).toBe("server_error");
   });
 
   it("stops after the server-error retry budget", async () => {
-    const { rec, client } = setup({ status: 500, body: {} });
+    const { rec, client } = setupWithSleep({ status: 500, body: {} });
     await captureError(client.listEnv("prj_abc123"));
     expect(rec.requests).toHaveLength(1 + MAX_SERVER_ERROR_RETRIES);
   });
 
   it("maps a 503 to the server_error code as well", async () => {
-    const { client } = setup({ status: 503, body: {} });
+    const { client } = setupWithSleep({ status: 503, body: {} });
     const error = await captureError(client.listEnv("prj_abc123"));
     expect((error as VercelError).code).toBe("server_error");
   });
@@ -1029,7 +1038,7 @@ describe("Errors", () => {
   });
 
   it("never puts the token in the stringified error", async () => {
-    const { client } = setup({ status: 500, body: {} });
+    const { client } = setupWithSleep({ status: 500, body: {} });
     const error = await captureError(client.listEnv("prj_abc123"));
     expect(String(error)).not.toContain(TOKEN);
   });
@@ -1142,7 +1151,7 @@ describe("I1 — never see, log, store, or emit a value", () => {
     await fc.assert(
       fc.asyncProperty(fc.string({ minLength: 8 }), async (v) => {
         const secret = `SEKRIT-${v}`;
-        const { client } = setup({ status: 500, body: { error: { message: secret } } });
+        const { client } = setupWithSleep({ status: 500, body: { error: { message: secret } } });
         const error = await captureError(client.listEnv("prj_abc123"));
         const vercelError = error as VercelError;
         expect(vercelError.message).not.toContain("SEKRIT-");

@@ -85,6 +85,8 @@ const CH_SQUOTE = 39;
 const CH_LPAREN = 40;
 const CH_RPAREN = 41;
 const CH_COMMA = 44;
+const CH_PLUS = 43;
+const CH_MINUS = 45;
 const CH_DOT = 46;
 const CH_COLON = 58;
 const CH_LT = 60;
@@ -638,10 +640,48 @@ function isOptionalSite(masked: string, source: string, exprStart: number, end: 
   if ((code === CH_EQ || code === CH_BANG) && next === CH_EQ) {
     let after = cursor + 2;
     if (masked.charCodeAt(after) === CH_EQ) after += 1;
-    return readIdent(source, skipWs(masked, after)) === "undefined";
+    // Comparing against a literal is a presence test: the code has a branch for
+    // the variable being absent. Comparing against another expression is not.
+    return isLiteralComparand(source, skipWs(source, after));
   }
-  if (code === CH_RPAREN) return isSoleIfCondition(masked, exprStart);
+  if (code === CH_RPAREN && isSoleIfCondition(masked, exprStart)) return true;
+
+  // `!x`, `!!x` and `Boolean(x)` coerce the value to a yes/no and never read it,
+  // so the code already copes with the variable being absent. A member access on
+  // the site (`!x.length`) does read it, and stays required.
+  if (code !== CH_DOT && code !== CH_LBRACKET) {
+    if (masked.charCodeAt(beforeEnd) === CH_BANG) return true;
+    if (isBooleanCall(masked, beforeEnd)) return true;
+  }
   return false;
+}
+
+/** The words that are literals rather than references to something else. */
+const LITERAL_WORDS = new Set(["undefined", "null", "true", "false", "NaN", "Infinity"]);
+
+/**
+ * True when the token at `at` is a literal: a quoted string, a number, or one of
+ * the literal keywords. Read from the raw source, because `masked` blanks out
+ * the contents — and the quotes — of every string.
+ */
+function isLiteralComparand(source: string, at: number): boolean {
+  const code = source.charCodeAt(at);
+  if (code === CH_DQUOTE || code === CH_SQUOTE || code === CH_BACKTICK) return true;
+  if (isDigit(code)) return true;
+  if ((code === CH_MINUS || code === CH_PLUS || code === CH_DOT) && isDigit(source.charCodeAt(at + 1))) {
+    return true;
+  }
+  return LITERAL_WORDS.has(readIdent(source, at));
+}
+
+function isDigit(code: number): boolean {
+  return code >= 48 && code <= 57;
+}
+
+/** True when the character at `beforeEnd` opens a `Boolean(` call. */
+function isBooleanCall(masked: string, beforeEnd: number): boolean {
+  if (masked.charCodeAt(beforeEnd) !== CH_LPAREN) return false;
+  return readIdentBack(masked, skipWsBack(masked, beforeEnd - 1)) === "Boolean";
 }
 
 /**

@@ -57,13 +57,16 @@ function buildGitHub(token: string): GitHubDeps {
     defaultBranch: payload.repository?.default_branch ?? "main",
     prNumber,
     async listComments(issueNumber: number): Promise<IssueComment[]> {
-      const response = await client().rest.issues.listComments({
+      // Paginate: on a busy pull request the sticky comment is often past the
+      // first page, and missing it would post a duplicate report every run.
+      const octo = client();
+      const comments = await octo.paginate(octo.rest.issues.listComments, {
         owner,
         repo,
         issue_number: issueNumber,
         per_page: 100,
       });
-      return response.data.map((comment) => ({ id: comment.id, body: comment.body ?? "" }));
+      return comments.map((comment) => ({ id: comment.id, body: comment.body ?? "" }));
     },
     async createComment(issueNumber: number, body: string): Promise<IssueComment> {
       const response = await client().rest.issues.createComment({

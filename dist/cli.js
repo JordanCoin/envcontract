@@ -1323,6 +1323,8 @@ const scanner_CH_SQUOTE = 39;
 const CH_LPAREN = 40;
 const scanner_CH_RPAREN = 41;
 const CH_COMMA = 44;
+const CH_PLUS = 43;
+const CH_MINUS = 45;
 const CH_DOT = 46;
 const CH_COLON = 58;
 const scanner_CH_LT = 60;
@@ -1834,11 +1836,49 @@ function isOptionalSite(masked, source, exprStart, end) {
         let after = cursor + 2;
         if (masked.charCodeAt(after) === CH_EQ)
             after += 1;
-        return readIdent(source, skipWs(masked, after)) === "undefined";
+        // Comparing against a literal is a presence test: the code has a branch for
+        // the variable being absent. Comparing against another expression is not.
+        return isLiteralComparand(source, skipWs(source, after));
     }
-    if (code === scanner_CH_RPAREN)
-        return isSoleIfCondition(masked, exprStart);
+    if (code === scanner_CH_RPAREN && isSoleIfCondition(masked, exprStart))
+        return true;
+    // `!x`, `!!x` and `Boolean(x)` coerce the value to a yes/no and never read it,
+    // so the code already copes with the variable being absent. A member access on
+    // the site (`!x.length`) does read it, and stays required.
+    if (code !== CH_DOT && code !== scanner_CH_LBRACKET) {
+        if (masked.charCodeAt(beforeEnd) === scanner_CH_BANG)
+            return true;
+        if (isBooleanCall(masked, beforeEnd))
+            return true;
+    }
     return false;
+}
+/** The words that are literals rather than references to something else. */
+const LITERAL_WORDS = new Set(["undefined", "null", "true", "false", "NaN", "Infinity"]);
+/**
+ * True when the token at `at` is a literal: a quoted string, a number, or one of
+ * the literal keywords. Read from the raw source, because `masked` blanks out
+ * the contents — and the quotes — of every string.
+ */
+function isLiteralComparand(source, at) {
+    const code = source.charCodeAt(at);
+    if (code === scanner_CH_DQUOTE || code === scanner_CH_SQUOTE || code === scanner_CH_BACKTICK)
+        return true;
+    if (isDigit(code))
+        return true;
+    if ((code === CH_MINUS || code === CH_PLUS || code === CH_DOT) && isDigit(source.charCodeAt(at + 1))) {
+        return true;
+    }
+    return LITERAL_WORDS.has(readIdent(source, at));
+}
+function isDigit(code) {
+    return code >= 48 && code <= 57;
+}
+/** True when the character at `beforeEnd` opens a `Boolean(` call. */
+function isBooleanCall(masked, beforeEnd) {
+    if (masked.charCodeAt(beforeEnd) !== CH_LPAREN)
+        return false;
+    return readIdentBack(masked, skipWsBack(masked, beforeEnd - 1)) === "Boolean";
 }
 /**
  * The right-hand side of `??` / `||`. A bare `throw` expression or `undefined`
@@ -1910,6 +1950,39 @@ const TEST_FILE_MARKERS = [
 ];
 /** Suffixes never scanned, regardless of options. */
 const ALWAYS_IGNORED_SUFFIXES = [".d.ts", ".min.js", ".map"];
+/**
+ * Directories holding tooling that runs on a laptop or in CI but never inside a
+ * Vercel deployment. A variable only these read is not a deployment requirement.
+ * Skipped by default; a user `include` glob pulls any of them back in.
+ */
+const NON_DEPLOYED_DIRECTORIES = [
+    "scripts",
+    "script",
+    "e2e",
+    "cypress",
+    "playwright",
+    "test",
+    "tests",
+    ".storybook",
+    ".github",
+];
+/**
+ * Root config files for the same tooling. Matched by basename prefix, so
+ * `vitest.config.ts` and `vitest.config.mjs` both hit. Deliberately absent:
+ * `next.config.*`, `vite.config.*`, `astro.config.*`, `svelte.config.*` and
+ * `nuxt.config.*`, which Vercel evaluates at build time — the variables they
+ * read are real deployment requirements.
+ */
+const NON_DEPLOYED_CONFIG_PREFIXES = [
+    "playwright.config.",
+    "cypress.config.",
+    "vitest.config.",
+    "jest.config.",
+    "eslint.config.",
+    "prettier.config.",
+    ".eslintrc.",
+    "commitlint.config.",
+];
 /** The real Node filesystem adapter used by `main.ts`. */
 const nodeFileSystem = {
     async readdir(target) {
@@ -1985,6 +2058,20 @@ function isGitignored(relativePath, isDirectory, rules) {
 function isTestPath(relativePath) {
     return TEST_FILE_MARKERS.some((marker) => relativePath.includes(marker));
 }
+/** True when the path sits in tooling that never runs inside a deployment. */
+function isNonDeployedPath(relativePath, name) {
+    const segments = relativePath.split("/");
+    // The basename is checked separately below, so only directories count here.
+    for (let i = 0; i < segments.length - 1; i += 1) {
+        if (NON_DEPLOYED_DIRECTORIES.includes(segments[i] ?? ""))
+            return true;
+    }
+    // Config files are matched at the repository root only: a `vitest.config.ts`
+    // nested in `src/` is more likely to be application code than tool config.
+    if (segments.length > 1)
+        return false;
+    return NON_DEPLOYED_CONFIG_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
 /**
  * File-level selection. Hard rules (always-ignored suffixes, a real `.env`,
  * `.gitignore`) come first, then the user's `exclude`, then the user's
@@ -2010,6 +2097,8 @@ function isSelected(relativePath, name, opts, rules) {
     if (!DEFAULT_INCLUDE_EXTENSIONS.includes(extension))
         return false;
     if (opts.includeTests !== true && isTestPath(relativePath))
+        return false;
+    if (isNonDeployedPath(relativePath, name))
         return false;
     return true;
 }
@@ -2495,6 +2584,9 @@ function createVercelClient(options) {
                 if (serverErrorRetries >= MAX_SERVER_ERROR_RETRIES) {
                     fail("server_error", MESSAGES.serverError(status), status);
                 }
+                // Back off before the retry: an immediate second request only adds load
+                // to an API that is already failing.
+                await doSleep(backoffFor(serverErrorRetries));
                 serverErrorRetries += 1;
                 continue;
             }
@@ -2963,7 +3055,14 @@ async function emitReport(report, settings, deps) {
     const annotations = renderAnnotations(report);
     for (const annotation of annotations)
         deps.annotations.emit(annotation);
-    await deps.summary.write(markdown);
+    // A step summary is a courtesy, never a verdict: a read-only summary file
+    // must not turn a passing check red.
+    try {
+        await deps.summary.write(markdown);
+    }
+    catch (error) {
+        deps.logger.warning(`Could not write the step summary: ${describe(error)}`);
+    }
     const missing = report.findings
         .filter((finding) => finding.status === "missing")
         .map((finding) => finding.key);
@@ -3251,13 +3350,14 @@ function toInputs(args, token) {
 }
 /** The CLI, with injected deps and an injected writer. Returns the exit code. */
 async function cli(argv, deps, write) {
+    // stdout carries the report and nothing else, so `--json` stays pipeable.
+    // Diagnostics — usage errors, the missing-token message — go to stderr.
     const parsed = parseArgs(argv);
     if (isCliError(parsed)) {
-        write(parsed.message);
-        write("");
-        write(USAGE.trimEnd());
+        deps.logger.error(`${parsed.message}\n\n${USAGE.trimEnd()}`);
         return 2;
     }
+    // `--help` is a request for the usage block, so it is output, not an error.
     if (parsed.help) {
         write(USAGE.trimEnd());
         return 0;
@@ -3265,7 +3365,7 @@ async function cli(argv, deps, write) {
     const fromEnv = parsed.tokenEnv === null ? deps.env["VERCEL_TOKEN"] : deps.env[parsed.tokenEnv];
     const token = (parsed.token ?? fromEnv ?? "").trim();
     if (token === "") {
-        write("No Vercel token. Pass --token, or set VERCEL_TOKEN in the environment.");
+        deps.logger.error("No Vercel token. Pass --token, or set VERCEL_TOKEN in the environment.");
         return 2;
     }
     const result = await runEnvContract(toInputs(parsed, token), deps);

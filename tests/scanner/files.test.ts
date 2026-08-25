@@ -225,6 +225,78 @@ describe("File selection — test files", () => {
   });
 });
 
+/*
+ * Non-deployed paths: tooling that runs on a developer's laptop or in CI, never
+ * inside a Vercel deployment. A variable only these files read is not a
+ * deployment requirement, so reporting it is a false positive.
+ */
+describe("File selection — non-deployed paths", () => {
+  const skipped = [
+    "scripts/seed.ts",
+    "script/build.ts",
+    "e2e/checkout.ts",
+    "cypress/support/commands.ts",
+    "playwright/fixtures.ts",
+    "test/helper.ts",
+    "tests/helper.ts",
+    ".storybook/main.ts",
+    ".github/scripts/release.ts",
+    "playwright.config.ts",
+    "cypress.config.ts",
+    "vitest.config.ts",
+    "jest.config.js",
+    "eslint.config.js",
+    "prettier.config.js",
+    ".eslintrc.js",
+    "commitlint.config.js",
+  ];
+
+  for (const candidate of skipped) {
+    it(`skips ${candidate} by default`, async () => {
+      await write(candidate, "const a = process.env.A;\n");
+      expect(await collectPaths()).not.toContain(candidate);
+    });
+  }
+
+  // These run at build time on Vercel, so the variables they read are real.
+  const kept = [
+    "next.config.js",
+    "vite.config.ts",
+    "astro.config.mjs",
+    "svelte.config.js",
+    "nuxt.config.ts",
+  ];
+
+  for (const candidate of kept) {
+    it(`still collects ${candidate}, which runs at build time`, async () => {
+      await write(candidate, "const a = process.env.A;\n");
+      expect(await collectPaths()).toContain(candidate);
+    });
+  }
+
+  it("pulls a skipped directory back in with a user include glob", async () => {
+    await write("scripts/seed.ts", "const a = process.env.A;\n");
+    expect(await collectPaths({ include: ["scripts/**"] })).toContain("scripts/seed.ts");
+  });
+
+  it("pulls a skipped config file back in with a user include glob", async () => {
+    await write("playwright.config.ts", "const a = process.env.A;\n");
+    expect(await collectPaths({ include: ["playwright.config.*"] })).toContain(
+      "playwright.config.ts",
+    );
+  });
+
+  it("does not skip a source directory whose name merely starts with script", async () => {
+    await write("scripting/engine.ts", "const a = 1;\n");
+    expect(await collectPaths()).toContain("scripting/engine.ts");
+  });
+
+  it("does not skip a nested source file named like a config it does not own", async () => {
+    await write("src/next.config.helper.ts", "const a = 1;\n");
+    expect(await collectPaths()).toContain("src/next.config.helper.ts");
+  });
+});
+
 describe("File selection — user include and exclude globs", () => {
   it("collects a file matched by a user include glob that the defaults skip", async () => {
     await write("src/app.test.ts", "const a = 1;\n");

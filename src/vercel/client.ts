@@ -278,6 +278,9 @@ export function createVercelClient(options: VercelClientOptions): VercelClient {
         if (serverErrorRetries >= MAX_SERVER_ERROR_RETRIES) {
           fail("server_error", MESSAGES.serverError(status), status);
         }
+        // Back off before the retry: an immediate second request only adds load
+        // to an API that is already failing.
+        await doSleep(backoffFor(serverErrorRetries));
         serverErrorRetries += 1;
         continue;
       }

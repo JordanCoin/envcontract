@@ -353,6 +353,61 @@ describe("Optional detection", () => {
     );
     expect(result.references.map((r) => r.optional)).toEqual([true, false]);
   });
+
+  /*
+   * Comparing a variable to a literal is a presence test, not a use: the code
+   * takes the false branch when the variable is absent. The @next/bundle-analyzer
+   * line below is the canonical example, and it was being reported as required.
+   */
+
+  it("marks the @next/bundle-analyzer `=== \"true\"` line optional", () => {
+    expectOneRef(scan('const enabled = process.env.ANALYZE === "true";'), {
+      key: "ANALYZE",
+      optional: true,
+    });
+  });
+
+  it("marks a site compared with `!==` to a string literal as optional", () => {
+    expectOneRef(scan("const off = process.env.FLAG !== '1';"), {
+      key: "FLAG",
+      optional: true,
+    });
+  });
+
+  it("marks a site compared with loose `==` to a literal as optional", () => {
+    expectOneRef(scan('if (process.env.MODE == "ci") {}'), { key: "MODE", optional: true });
+  });
+
+  it("marks a site compared with loose `!=` to `null` as optional", () => {
+    expectOneRef(scan("if (process.env.API_URL != null) {}"), { optional: true });
+  });
+
+  it("marks a site compared with a numeric literal as optional", () => {
+    expectOneRef(scan("if (process.env.RETRIES === 0) {}"), { key: "RETRIES", optional: true });
+  });
+
+  it("marks a site compared with a boolean literal as optional", () => {
+    expectOneRef(scan("if (process.env.DEBUG_MODE === true) {}"), {
+      key: "DEBUG_MODE",
+      optional: true,
+    });
+  });
+
+  it("still marks a site compared with `=== undefined` optional", () => {
+    expectOneRef(scan("if (process.env.API_URL === undefined) {}"), { optional: true });
+  });
+
+  it("marks a site wrapped in a logical not as optional", () => {
+    expectOneRef(scan("if (!process.env.API_URL) {}"), { optional: true });
+  });
+
+  it("marks a site wrapped in a double negation as optional", () => {
+    expectOneRef(scan("const on = !!process.env.API_URL;"), { optional: true });
+  });
+
+  it("marks a site wrapped in Boolean() as optional", () => {
+    expectOneRef(scan("const on = Boolean(process.env.API_URL);"), { optional: true });
+  });
 });
 
 /* ------------------------------------------------------- NOT optional */
@@ -410,6 +465,22 @@ describe("NOT optional", () => {
 
   it("keeps a site required when the if condition also tests something else", () => {
     expectOneRef(scan("if (ready && process.env.API_URL.length) {}"), { optional: false });
+  });
+
+  it("keeps a site required when it is compared to another expression, not a literal", () => {
+    expectOneRef(scan("if (process.env.API_URL === defaultUrl) {}"), { optional: false });
+  });
+
+  it("keeps a site required when a method is called on it before the comparison", () => {
+    expectOneRef(scan('if (process.env.API_URL.trim() === "x") {}'), { optional: false });
+  });
+
+  it("keeps a site required when negation applies to a property of it", () => {
+    expectOneRef(scan("if (!process.env.API_URL.length) {}"), { optional: false });
+  });
+
+  it("keeps a site required when it is wrapped in a coercion other than Boolean()", () => {
+    expectOneRef(scan("const v = String(process.env.API_URL);"), { optional: false });
   });
 });
 
