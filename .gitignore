@@ -1,0 +1,6 @@
+node_modules/
+coverage/
+.vitest/
+*.log
+.DS_Store
+# dist is committed (GitHub Actions runs the bundled output)

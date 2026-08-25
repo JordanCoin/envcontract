@@ -1,0 +1,37 @@
+{
+  "name": "envcontract",
+  "version": "1.0.0",
+  "description": "Does the code in this commit require configuration that this deployment environment doesn't have?",
+  "author": "JordanCoin",
+  "license": "MIT",
+  "type": "module",
+  "private": false,
+  "bin": {
+    "envcontract": "dist/cli/index.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "ncc build src/main.ts -o dist && ncc build src/cli.ts -o dist/cli"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@vercel/ncc": "^0.38.3",
+    "fast-check": "^3.23.2",
+    "js-yaml": "^4.1.0",
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

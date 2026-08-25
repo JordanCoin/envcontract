@@ -1,0 +1,96 @@
+name: "EnvContract for Vercel"
+description: "Fails the build when the code in this commit needs environment variables the target Vercel environment does not have. Never reads a value."
+author: "JordanCoin"
+
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  vercel_token:
+    description: "Vercel API token (vcp_...). A project-scoped token is recommended; the Action only performs GET requests."
+    required: true
+  target:
+    description: "Vercel environment to check: production, preview, development, or auto (production on a push to the default branch, preview otherwise)."
+    required: false
+    default: "preview"
+  project:
+    description: "Vercel project id or name. Auto-detected from the repository link, VERCEL_PROJECT_ID, or .vercel/project.json when omitted."
+    required: false
+    default: ""
+  team_id:
+    description: "Vercel team id. Falls back to VERCEL_ORG_ID / VERCEL_TEAM_ID or .vercel/project.json orgId."
+    required: false
+    default: ""
+  branch:
+    description: "Git branch used to match branch-scoped preview variables. Defaults to GITHUB_HEAD_REF, then GITHUB_REF_NAME."
+    required: false
+    default: ""
+  path:
+    description: "Directory to scan."
+    required: false
+    default: "."
+  include:
+    description: "Newline- or comma-separated extra globs to include."
+    required: false
+    default: ""
+  exclude:
+    description: "Newline- or comma-separated globs to exclude."
+    required: false
+    default: ""
+  ignore:
+    description: "Newline- or comma-separated keys to ignore. Supports PREFIX_* globs."
+    required: false
+    default: ""
+  optional:
+    description: "Newline- or comma-separated keys to treat as optional."
+    required: false
+    default: ""
+  required:
+    description: "Newline- or comma-separated keys to treat as required even when they are not referenced in code."
+    required: false
+    default: ""
+  fail_on:
+    description: "Which findings fail the run: missing, elsewhere, or never."
+    required: false
+    default: "elsewhere"
+  on_error:
+    description: "What to do when Vercel cannot be reached or the token is rejected: fail or warn."
+    required: false
+    default: "fail"
+  comment:
+    description: "Post a sticky pull request comment with the report."
+    required: false
+    default: "true"
+  github_token:
+    description: "Token used to post the sticky pull request comment."
+    required: false
+    default: "${{ github.token }}"
+  license_key:
+    description: "EnvContract license key. When set, the report is posted to report_url for Slack/email alerting."
+    required: false
+    default: ""
+  report_url:
+    description: "Endpoint that receives the report when license_key is set."
+    required: false
+    default: "https://envcontract.dev/api/report"
+  include_tests:
+    description: "Scan test, spec, story, and mock files too."
+    required: false
+    default: "false"
+
+outputs:
+  status:
+    description: "pass, fail, or error."
+  missing:
+    description: "Comma-separated list of required keys missing from the target environment."
+  missing_count:
+    description: "Number of required keys missing from the target environment."
+  report_json:
+    description: "Path to the JSON report written by this run."
+  summary:
+    description: "The Markdown report body."
+
+runs:
+  using: "node24"
+  main: "dist/index.js"
