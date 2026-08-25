@@ -50,7 +50,7 @@ That's the whole setup. The project is auto-detected from the repository link.
 | 🟡 `missing_optional` | Referenced with a fallback (`?? "default"`), absent | warning |
 | ℹ️ `unused` | Declared in `.env.example`, never referenced | info |
 
-A reference counts as **optional** when the code can clearly run without it: `process.env.X ?? "dev"`, `process.env.X || 3000`, `if (process.env.X)`, a destructuring default, `typeof process.env.X`, or a `// envcontract-optional` comment. Everything else is required, including `process.env.X!`, `process.env.X as string`, and `new URL(process.env.X)`.
+A reference counts as **optional** when the code can clearly run without it: `process.env.X ?? "dev"`, `process.env.X || 3000`, `if (process.env.X)`, `process.env.ANALYZE === "true"` (a comparison to a literal), `!!process.env.X`, a destructuring default, `typeof process.env.X`, or a `// envcontract-optional` comment. Everything else is required, including `process.env.X!`, `process.env.X as string`, and `new URL(process.env.X)`.
 
 Branch-scoped Preview variables are matched against the pull request's head branch, so a variable that only exists for `staging` is reported as `elsewhere` on a PR from `feature/x`.
 
@@ -124,7 +124,7 @@ Next.js (App and Pages router), Vite, SvelteKit, Astro, Remix, Nuxt, plain Node.
 ## Known limitations
 
 - Dynamic access such as `process.env[name]` cannot be resolved statically; it is reported as an info count, never a failure.
-- Only JavaScript and TypeScript sources are scanned. A variable declared solely in a non-JS file — `schema.prisma` (`env("DATABASE_URL")`), `docker-compose.yml`, `wrangler.toml`, a `turbo.json` `env` array — is invisible to the scanner. List those keys under `required:` (for example `required: DATABASE_URL`) so they are still checked against the environment.
+- Only JavaScript and TypeScript sources are scanned. A variable declared solely in a non-JS file (`schema.prisma` with `env("DATABASE_URL")`, `docker-compose.yml`, `wrangler.toml`, a `turbo.json` `env` array) is invisible to the scanner. List those keys under `required:` (for example `required: DATABASE_URL`) so they are still checked against the environment.
 - Vercel custom environments are matched by `customEnvironmentId` when you pass one; the default targets are production, preview, and development.
 - Monorepos: run the Action once per Vercel project with `path:` and `project:` set.
 
