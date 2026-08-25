@@ -108,7 +108,7 @@ describe("action.yml is the published contract", () => {
     expect(inputs["fail_on"]?.default).toBe("elsewhere");
     expect(inputs["on_error"]?.default).toBe("fail");
     expect(inputs["comment"]?.default).toBe("true");
-    expect(inputs["report_url"]?.default).toBe("https://envcontract.dev/api/report");
+    expect(inputs["report_url"]?.default).toBe("https://envcontract.vercel.app/api/report");
     expect(inputs["github_token"]?.default).toBe("${{ github.token }}");
     expect(inputs["include_tests"]?.default).toBe("false");
   });

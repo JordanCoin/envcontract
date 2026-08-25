@@ -865,12 +865,12 @@ describe("License report upload", () => {
   it("posts the report exactly once to report_url when a license key is set", async () => {
     const { deps, recorder } = fixtureDeps(FIXTURE_NEXT, { envs: ENV_TWO_MISSING });
     await runEnvContract(
-      nextInputs({ license_key: "lic_abc", report_url: "https://envcontract.dev/api/report" }),
+      nextInputs({ license_key: "lic_abc", report_url: "https://envcontract.vercel.app/api/report" }),
       deps,
     );
     const posts = recorder.requests.filter((r) => r.method === "POST");
     expect(posts).toHaveLength(1);
-    expect(posts[0]?.url).toBe("https://envcontract.dev/api/report");
+    expect(posts[0]?.url).toBe("https://envcontract.vercel.app/api/report");
   });
 
   it("authenticates the upload with the license key as a bearer token", async () => {
@@ -932,7 +932,7 @@ describe("License report upload", () => {
   it("omits the free footer from the summary when a license key is configured", async () => {
     const { deps } = fixtureDeps(FIXTURE_NEXT, { envs: ENV_ALL_PRESENT });
     const result = await runEnvContract(nextInputs({ license_key: "lic_abc" }), deps);
-    expect(result.markdown).not.toContain("https://envcontract.dev\n");
+    expect(result.markdown).not.toContain("https://envcontract.vercel.app\n");
   });
 });
 
@@ -1057,7 +1057,7 @@ describe("I4 — read-only", () => {
     const { deps, recorder } = fixtureDeps(FIXTURE_NEXT, { envs: ENV_ALL_PRESENT });
     await runEnvContract(nextInputs({ license_key: "lic_abc" }), deps);
     for (const request of recorder.requests) {
-      if (request.method !== "GET") expect(request.url).toBe("https://envcontract.dev/api/report");
+      if (request.method !== "GET") expect(request.url).toBe("https://envcontract.vercel.app/api/report");
     }
   });
 

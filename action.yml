@@ -73,7 +73,7 @@ inputs:
   report_url:
     description: "Endpoint that receives the report when license_key is set."
     required: false
-    default: "https://envcontract.dev/api/report"
+    default: "https://envcontract.vercel.app/api/report"
   include_tests:
     description: "Scan test, spec, story, and mock files too."
     required: false

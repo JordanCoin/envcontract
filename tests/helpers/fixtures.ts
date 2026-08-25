@@ -305,7 +305,7 @@ export function makeInputs(over: Partial<Inputs> = {}): Inputs {
     comment: "true",
     github_token: "gh_token",
     license_key: "",
-    report_url: "https://envcontract.dev/api/report",
+    report_url: "https://envcontract.vercel.app/api/report",
     include_tests: "false",
     ...over,
   };
