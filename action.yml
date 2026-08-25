@@ -1,5 +1,5 @@
 name: "EnvContract for Vercel"
-description: "Fails the build when the code in this commit needs environment variables the target Vercel environment does not have. Never reads a value."
+description: "Fail the PR when code needs an environment variable the target Vercel environment lacks. Names only, never values."
 author: "JordanCoin"
 
 branding:
